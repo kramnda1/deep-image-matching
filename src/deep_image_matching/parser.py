@@ -17,7 +17,7 @@ def parse_cli() -> dict:
         "-d",
         "--dir",
         type=str,
-        help="Project directoryt, containing a folder 'images', in which all the images are present and where the results will be saved.",
+        help="Project directory, containing a folder 'images', in which all the images are present and where the results will be saved.",
         default=None,
     )
     parser.add_argument(
@@ -25,6 +25,13 @@ def parse_cli() -> dict:
         "--images",
         type=str,
         help="Folder containing images to process. If not specified, an 'images' folder inside the project folder is assumed.",
+        default=None,
+    )
+    parser.add_argument(
+        "-m",
+        "--masks",
+        type=str,
+        help="Folder containing masks for feature filtering. If not specified, a 'masks' folder inside the project folder is assumed. ",
         default=None,
     )
     # parser.add_argument(

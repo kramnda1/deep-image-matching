@@ -91,6 +91,7 @@ class ImageMatching:
         matching_strategy: str,
         local_features: str,
         matching_method: str,
+        masks_dir: Path = None,
         retrieval_option: str = None,
         pair_file: Path = None,
         overlap: int = None,
@@ -106,6 +107,7 @@ class ImageMatching:
             matching_strategy (str): The strategy for generating pairs of images for matching.
             local_features (str): The method for extracting local features from the images.
             matching_method (str): The method for matching pairs of images.
+            masks_dir (Path, optional): Path to the directory containing the masks. Defaults to None.
             retrieval_option (str, optional): The retrieval option for generating pairs of images. Defaults to None.
             pair_file (Path, optional): Path to the file containing custom pairs of images. Required when 'retrieval_option' is set to 'custom_pairs'. Defaults to None.
             overlap (int, optional): The overlap between tiles. Required when 'retrieval_option' is set to 'sequential'. Defaults to None.
@@ -126,6 +128,7 @@ class ImageMatching:
         self.image_dir = Path(imgs_dir)
         self.output_dir = Path(output_dir)
         self.matching_strategy = matching_strategy
+        self.masks_dir = masks_dir
         self.retrieval_option = retrieval_option
         self.local_features = local_features
         self.matching_method = matching_method
@@ -172,6 +175,25 @@ class ImageMatching:
             raise ValueError(f"Image folder empty. Supported formats: {self.image_ext}")
         elif len(images) == 1:
             raise ValueError("Image folder must contain at least two images")
+
+        if self.masks_dir is not None:
+            self.masks_list = ImageList(self.masks_dir)
+            masks = self.masks_list.img_names
+            masks_stem = [mask.stem for mask in self.masks_list.img_paths]
+            masks_suffix = set([mask.suffix for mask in self.masks_list.img_paths])
+            if len(masks) == 0 or len(masks) != len(images):
+                raise ValueError(
+                    f"Masks folder empty or does not contain the same number of images as the image folder. Supported formats: {self.image_ext}"
+                )
+            if len(masks) == 1:
+                raise ValueError("Masks folder must contain at least two masks")
+            # Check if the masks have the same names as the images
+            if images != masks_stem:
+                raise ValueError("Images and masks must have the same names")
+            if len(masks_suffix) != 1 or masks_suffix.pop() != ".png":
+                raise ValueError(
+                    "All masks must have the same extension '.png' appended to the image name (with the origina extension)"
+                )
 
         # Initialize output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -377,8 +399,12 @@ class ImageMatching:
         pprint(self.custom_config["extractor"])
 
         # Extract features
-        for img in tqdm(self.image_list):
-            feature_path = self._extractor.extract(img)
+        if self.masks_dir is None:
+            for img in tqdm(self.image_list):
+                feature_path = self._extractor.extract(img)
+        else:
+            for img, mask in tqdm(zip(self.image_list, self.masks_list)):
+                feature_path = self._extractor.extract(img, mask)
 
         torch.cuda.empty_cache()
         logger.info("Features extracted!")

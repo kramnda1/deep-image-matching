@@ -244,6 +244,7 @@ class Config:
         "gui": False,
         "dir": None,
         "images": None,
+        "masks": None,
         "outs": None,
         "pipeline": None,
         "config_file": None,
@@ -408,6 +409,23 @@ class Config:
                     f"Invalid images folder {args['images']}. Direcotry does not exist"
                 )
 
+        # Check masks folder
+        if args["masks"] is None:
+            args["masks"] = args["dir"] / "masks"
+            if args["masks"].exists():
+                if not args["masks"].is_dir():
+                    raise ValueError(
+                        f"Invalid mask folder {args['masks']}. Direcotry does not exist"
+                    )
+            else:
+                args["masks"] = None
+        else:
+            args["masks"] = Path(args["masks"])
+            if not args["masks"].exists() or not args["masks"].is_dir():
+                raise ValueError(
+                    f"Invalid mask folder {args['masks']}. Direcotry does not exist"
+                )
+
         # if output folder is not provided, use the default one
         if args["outs"] is None:
             args["outs"] = (
@@ -504,14 +522,16 @@ class Config:
             args["openmvg"] = Path(args["openmvg"])
             if not args["openmvg"].exists():
                 raise ValueError(f"File {args['openmvg']} does not exist")
-        
+
         if args["camera_options"] is not None:
-            if Path(args["camera_options"]).suffix != '.yaml':
+            if Path(args["camera_options"]).suffix != ".yaml":
                 raise ValueError(f"File passed to --camera_options must be .yaml file")
-        
+
         if args["upright"] == True:
             if args["strategy"] == "matching_lowres":
-                raise ValueError(f"With option '--upright' is not possible to use '--strategy matching_lowres', since pairs are chosen with superpoint+lightglue that is not rotation invariant. Use another strategy, e.g. 'bruteforce'.")
+                raise ValueError(
+                    f"With option '--upright' is not possible to use '--strategy matching_lowres', since pairs are chosen with superpoint+lightglue that is not rotation invariant. Use another strategy, e.g. 'bruteforce'."
+                )
 
         # Build configuration dictionary
         cfg = {
@@ -520,6 +540,7 @@ class Config:
             "quality": Quality[args["quality"].upper()],
             "tile_selection": TileSelection[args["tiling"].upper()],
             "matching_strategy": args["strategy"],
+            "masks_dir": args["masks"],
             "retrieval": args["global_feature"],
             "pair_file": args["pair_file"],
             "overlap": args["overlap"],

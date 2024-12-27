@@ -26,6 +26,7 @@ img_matching = ImageMatching(
     local_features=config.extractor["name"],
     matching_method=config.matcher["name"],
     pair_file=config.general["pair_file"],
+    masks_dir=config.general["masks_dir"],
     retrieval_option=config.general["retrieval"],
     overlap=config.general["overlap"],
     existing_colmap_model=config.general["db_path"],

@@ -160,12 +160,18 @@ class ExtractorBase(metaclass=ABCMeta):
         )
         logger.debug(f"Running inference on device {self._device}")
 
-    def extract(self, img: Union[Image, Path, str]) -> np.ndarray:
+    def extract(
+        self, img: Union[Image, Path, str], mask: Union[None, Image, Path, str] = None
+    ) -> np.ndarray:
         """
         Extract features from an image. This is the main method of the feature extractor.
 
         Args:
                 img: Image to extract features from. It can be either a path to an image or an Image object
+                mask: Mask to filter features extracted from img. It can be either a path to a mask image or an Image object
+                It has to be a mask of the same size as img, with value 0 meaning that features in the corresponding position of img should be discarded
+                The name of the mask image must be the same as the image, with the addition of extension .png
+                Example: if the image is 'image.jpg', the mask must be 'image.jpg.png' of for png images 'image.png' the mask must be 'image.png.png'
 
         Returns:
                 List of features extracted from the image. Each feature is a 2D NumPy array
@@ -181,8 +187,29 @@ class ExtractorBase(metaclass=ABCMeta):
             raise TypeError(
                 "Invalid image path. 'img' must be a string, a Path or an Image object"
             )
+
         if not im_path.exists():
             raise ValueError(f"Image {im_path} does not exist")
+
+        if mask is not None:
+            if isinstance(mask, str):
+                mask_path = Path(mask)
+            elif isinstance(mask, Image):
+                mask_path = mask.path
+            elif isinstance(mask, Path):
+                mask_path = mask
+            else:
+                raise TypeError(
+                    "Invalid mask path. 'mask' must be a string, a Path or an Image object"
+                )
+
+            if not mask_path.exists():
+                raise ValueError(f"Mask {mask_path} does not exist")
+
+            if im_path.name != mask_path.stem or mask_path.suffix != ".png":
+                raise ValueError(
+                    f"Image and mask names do not match: {im_path.name} != {mask_path.stem} or the mask extension is not .png"
+                )
 
         output_dir = Path(self._config["general"]["output_dir"])
         feature_path = output_dir / "features.h5"
@@ -193,6 +220,18 @@ class ExtractorBase(metaclass=ABCMeta):
             image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         if self.as_float:
             image = image.astype(np.float32)
+
+        # Load mask
+        if mask is not None:
+            mask = cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE)
+            if mask.shape[:2] != image.shape[:2]:
+                raise ValueError(
+                    f"Mask size {mask.shape[:2]} does not match image size {image.shape[:2]}."
+                )
+            if mask.ndim == 3:
+                mask = mask[:, :, 0]
+            # convert to boolean mask (0: False, >0: True)
+            mask = mask > 0
 
         # Resize images if needed
         image_ = self._resize_image(self._quality, image, interp=self.interp)
@@ -218,6 +257,16 @@ class ExtractorBase(metaclass=ABCMeta):
 
         # Add the image_size to the features (if not already present)
         features["image_size"] = np.array(image.shape[:2])
+
+        # Filter features using the provided mask
+        if mask is not None:
+            inlier_mask = mask[
+                features["keypoints"][:, 1].round().astype(int),
+                features["keypoints"][:, 0].round().astype(int),
+            ]
+            features["keypoints"] = features["keypoints"][inlier_mask]
+            features["descriptors"] = features["descriptors"][:, inlier_mask]
+            features["tile_idx"] = features["tile_idx"][inlier_mask]
 
         # Save features to disk in h5 format
         save_features_h5(
